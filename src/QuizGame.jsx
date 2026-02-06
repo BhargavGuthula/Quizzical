@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 
 export default function QuizGame() {
-    const [question, setQuestion] = useState('')
+    const [question, setQuestion] = useState({})
     const [loading, setLoading] = useState(true)
-    const [answers , setAnswers] = useState([])
+    const [selectedAnswers, setSelectedAnswers] = useState({})
+    const [answer, setAnswer] = useState([])
+    const [checked ,setIsChecked] = useState(false)
     useEffect(() => {
         const controller = new AbortController()
         const fetchData = async () => {
@@ -13,8 +15,12 @@ export default function QuizGame() {
                         signal: controller.signal
                     })
                 const data = await result.json()
-                console.log(data.results[0].question, data.results[0].correct_answer, data.results[0].incorrect_answers)
                 setQuestion(data)
+                setAnswer(data.results.map((q, i) => {
+                    return (
+                        {index: i, options: [decodeHtml(q.correct_answer), ...q.incorrect_answers.map(decodeHtml)].sort(() => Math.random() - 0.5)}
+                    )
+                }))
                 setLoading(false)
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -29,29 +35,56 @@ export default function QuizGame() {
         return () => controller.abort()
     }, [])
 
-      const decodeHtml = (str) => {
+    const decodeHtml = (str) => {
         const textarea = document.createElement('textarea')
         textarea.innerHTML = str
         return textarea.value
-      }
-      return (
-          <div className='quiz-game'>
-              {loading ? <div>Loading...</div> :
-                  <div>{question.results.map (q =>{
-                      return (
-                      <div key={q.question}>
-                      <p className='questions'>{decodeHtml(q.question)}</p>
-                        {[decodeHtml(q.correct_answer), ...q.incorrect_answers.map(decodeHtml)]
-                        .sort(() => Math.random() - 0.5).map((answers , index) =>(
-                          <button key={index} className='answer-btn'>{answers}</button>
-                        )
-                        ) }
-                      {console.log(q.correct_answer)}                   
-                      </div>
-                  )})}
+    }
+    function handleAnswerClick(answer, index) {
+        setSelectedAnswers(prevSelected => (
+            { ...prevSelected, [index]: answer }
+        ))
+    }
+    
 
-                  </div>
-                
+
+    
+
+    const questionOptions = useMemo(() => {
+        return question?.results?.map((q, index) => {
+            return (
+                <div className='quiz' key={index}>
+                    <p className='questions'>{decodeHtml(q.question)}</p>
+                    {answer[index]?.options?.map((option, i) => {
+                        const isSelected = selectedAnswers[index] === option
+                        const isCorrect = q.correct_answer === option
+                        const isWrong = isSelected && !isCorrect
+                        return (
+                            <button
+                                key={i}
+                                className={`answer-btn ${isSelected && 'selected'} ${isCorrect &&checked && 'correct'} ${isWrong && checked && 'wrong'}`}
+                                onClick={() => handleAnswerClick(option, index)}
+                            >
+                                {option}
+                            </button>
+                        )
+                    })}
+                </div>
+
+            )
+        })
+    }, [selectedAnswers,checked, question])
+
+    return (
+        <div className='quiz-game-page'>
+            {loading ? <>Loading...</> :
+                <div className='quiz-game'>
+                    {questionOptions}
+                    {checked && <p className='score'>Your Score: {Object.entries(selectedAnswers).reduce((score, [index, answer]) => {
+                        return score + (answer === question.results[index].correct_answer ? 2 : 0)
+                    }, 0)}/10</p>}
+                    <button className='check-btn' onClick={() => setIsChecked(true  )} >Check Answers</button>
+                </div>
             }
         </div>
     )
